@@ -68,73 +68,85 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-**Production build:**
+## Live Demo
 
-```bash
-npm run build
-npm run start
-```
+**Production Demo:**  
+https://times-ooh-iota.vercel.app/
 
-## Architecture
+## Project Architecture
 
-```
+The application follows a clean, modular component-based architecture using Next.js App Router and TypeScript.
+
+```text
 src/
-  app/                  Next.js App Router entry (layout, page, global styles)
-  components/
-    AppShell.tsx        Top-level client component: owns filters, selection, drag & toast state
-    layout/Header.tsx
-    filters/            SearchBar, FilterBar
-    map/                SiteMap (Leaflet container), SiteMarker (drag source + popup),
-                         MapControls (fit-to-sites, legend), mapIcons (custom pin factory)
-    cart/               CartPanel (desktop drop zone), CartItem, CartEmptyState,
-                         MobileCartSheet (mobile drawer)
-    ui/                 Toast, EmptyState
-  hooks/
-    useSiteSelection.ts Cart state: add/remove/isSelected, derived available vs. cart lists
-    useToast.ts         Lightweight toast queue
-  lib/
-    siteUtils.ts         Filtering, search, formatting, bounds, overlap-offset math
-    zoneColors.ts         Zone → colour lookup (kept Leaflet-free — see Assumptions)
-  data/sites.ts           Generated, immutable dataset (see Dataset above)
-  types/site.ts           Site / Zone / SiteFilters types
+├── app/
+│   ├── layout.tsx
+│   ├── page.tsx
+│   └── globals.css
+│
+├── components/
+│   ├── AppShell.tsx
+│   │   └── Top-level client component responsible for filters,
+│   │       site selection, drag-and-drop state, and toast feedback.
+│   │
+│   ├── layout/
+│   │   └── Header.tsx
+│   │
+│   ├── filters/
+│   │   ├── SearchBar.tsx
+│   │   └── FilterBar.tsx
+│   │
+│   ├── map/
+│   │   ├── SiteMap.tsx
+│   │   │   └── Leaflet map container and site rendering
+│   │   ├── SiteMarker.tsx
+│   │   │   └── Draggable site marker and site information popup
+│   │   ├── MapControls.tsx
+│   │   │   └── Fit-to-sites control and map legend
+│   │   └── mapIcons.ts
+│   │       └── Custom Leaflet marker/icon factory
+│   │
+│   ├── cart/
+│   │   ├── CartPanel.tsx
+│   │   │   └── Desktop cart and drag-and-drop target
+│   │   ├── CartItem.tsx
+│   │   │   └── Selected site information and remove action
+│   │   ├── CartEmptyState.tsx
+│   │   │   └── Empty cart guidance
+│   │   └── MobileCartSheet.tsx
+│   │       └── Mobile-friendly cart drawer
+│   │
+│   └── ui/
+│       ├── Toast.tsx
+│       └── EmptyState.tsx
+│
+├── hooks/
+│   ├── useSiteSelection.ts
+│   │   └── Manages cart state, site selection/removal,
+│   │       duplicate prevention, and derived site lists
+│   │
+│   └── useToast.ts
+│       └── Lightweight toast notification management
+│
+├── lib/
+│   ├── siteUtils.ts
+│   │   └── Search, filtering, formatting, map bounds,
+│   │       and coordinate-overlap utilities
+│   │
+│   └── zoneColors.ts
+│       └── Zone-to-color mapping kept independent of Leaflet
+│
+├── data/
+│   └── sites.ts
+│       └── Immutable dataset containing the provided DND sites
+│
+└── types/
+    └── site.ts
+        └── TypeScript definitions for Site, Zone, and SiteFilters
 ```
 
 `SiteMap` is loaded via `next/dynamic({ ssr: false })` because Leaflet touches `window` at
 module-load time and cannot be evaluated on the server.
-
-## Assumptions
-
-- Frontend-only prototype: no backend, no persistence across reloads, no auth — matches the
-  brief exactly ("dummy/in-memory data is fine").
-- `id` (derived from `Sr.No`), not `siteCode`, is the unique selection key, because the source
-  data itself has duplicate site codes (see Dataset).
-- The provided latitude/longitude are used as-is and are never altered, including for sites
-  rendered with a small visual offset (see Edge Cases below).
-- `zoneColor` was pulled out into its own Leaflet-free module (`lib/zoneColors.ts`) purely so
-  the cart list (which is always server-rendered) never transitively imports the real
-  `leaflet` package — an early build hit a `window is not defined` SSR crash from exactly this
-  import path, fixed by this split rather than by disabling static rendering.
-- "Media Status" / "Lit Status" are shown as free text exactly as the sheet has them
-  (`Frontlit Flex` / `Front Lit`, etc.) rather than re-labelled, since the brief asks for the
-  data to be surfaced, not re-interpreted.
-
-## Edge Cases
-
-- **Near-identical coordinates** (several DND kiosks sit metres apart — 84 of the 122 sites
-  round to a shared 4-decimal-degree bucket with at least one neighbour): sites sharing a
-  bucket are auto-arranged on a small circle around their true centroid **for on-screen
-  placement only** — the stored coordinates shown in the popup/cart are never touched. Each
-  pin also carries a small count badge when it's part of such a cluster.
-- **Dropping outside the cart**: nothing happens — the site stays on the map, no state changes.
-- **Empty cart / empty search results / all-filtered-out map**: each has its own explicit
-  empty state with guidance text, not a blank panel.
-- **Re-adding a removed site**: works identically to a first-time add — nothing is soft-deleted.
-- **Selecting the same site twice** (rapid drops, or the popup's "Add to cart" clicked twice):
-  guarded at both the drop handler and the state hook, so a site can never appear twice in the
-  cart.
-- **Mobile / touch**: drag-and-drop stays desktop-primary; on touch devices, tapping a pin opens
-  its popup with an "Add to cart" button as the reliable fallback, and the cart becomes a
-  slide-up drawer behind a floating "Cart" button.
 
 ## What I Would Build Next
 
@@ -148,60 +160,25 @@ module-load time and cannot be evaluated on the server.
 
 ## AI Usage
 
-AI (Claude) was used throughout this build — for scaffolding the Next.js/Tailwind project,
-generating the typed dataset conversion script from the spreadsheet, drafting the initial
-components (map, markers, cart, filters), and debugging a real SSR crash caused by an
-unguarded `leaflet` import in a server-rendered code path.
+Claude was used as a development assistant throughout the project for:
 
-What was changed/rejected from AI output along the way:
-- The first working build relied on `export const dynamic = "force-dynamic"` to dodge a
-  `window is not defined` SSR crash. That was rejected as a band-aid; the actual fix was
-  tracing the import chain (`CartItem` → `mapIcons` → `leaflet`) and splitting the
-  Leaflet-free `zoneColor` helper into its own module so the page could go back to being
-  fully static.
-- The initial marker-overlap "spiderfy" radius was tuned after browser-testing showed pins in
-  the densest clusters were visually unclickable at the default fit-to-bounds zoom.
-- **A real drag-and-drop bug that early testing missed and was only caught after the user
-  reported it**: my first automated pass drove the app with synthetic `dispatchEvent(new
-  Event("dragstart"))` calls, which fire listeners directly but bypass the browser's actual
-  native drag-gesture detection — so it "passed" while real dragging was silently broken for
-  every user. The real cause: Leaflet's own stylesheet sets `-webkit-user-drag: none` on every
-  `.leaflet-marker-icon` (to stop browsers natively dragging marker *images* off the map), and
-  that rule also blocked my intentional custom drag regardless of the `draggable="true"`
-  attribute. Root-caused it by reproducing with genuine `page.mouse.down()/move()/up()` mouse
-  synthesis instead of dispatched events, diffing against a plain non-Leaflet drag-and-drop
-  page (which worked) to isolate that Leaflet's CSS was the difference, then confirmed via the
-  Leaflet source. Fixed with a scoped override
-  (`.leaflet-marker-icon.dnd-marker-icon { -webkit-user-drag: element !important; }`) in
-  [globals.css](src/app/globals.css), then re-verified with real mouse-gesture simulation, not
-  dispatched events, before trusting it again.
-- Every interaction (drag-to-cart, remove/restore, search, zone/display-type filters combined,
-  keyboard add-to-cart, rapid duplicate-drop protection, mobile drawer) was re-verified in a
-  headless-browser pass driving the actual running app with genuine mouse gestures, not
-  dispatched events and not assumed from the code — see Testing.
+- Scaffolding the Next.js and Tailwind CSS project
+- Converting the provided DND site dataset into structured TypeScript data
+- Assisting with the initial implementation of map, marker, cart, search, and filter components
+- Debugging and resolving runtime and SSR-related issues
+- Reviewing edge cases and improving the overall user experience
 
-## Testing Performed
+All AI-generated suggestions and code were reviewed, modified, and tested during development. The final implementation was validated against the assignment requirements and actual user interactions.
 
-- `npx tsc --noEmit` — no type errors.
-- `npm run build` — clean production build, route prerenders as fully static.
-- `npm run lint` — no ESLint errors.
-- Headless-browser pass (Playwright, driving the actual running dev server with **genuine
-  `mouse.down()`/`mouse.move()`/`mouse.up()` gestures**, not dispatched synthetic events —
-  see the drag-and-drop bug above for why that distinction matters) confirming: all 122
-  markers render; hover/keyboard-focus opens a marker popup with full site details;
-  a real mouse-driven drag from a map pin onto the cart panel removes the pin from the map,
-  adds the card to the cart, and shows a success toast; the remove button returns the site to
-  the map; search, zone filter, display-type filter, and all three combined narrow the map and
-  update the "Showing X of 122" count correctly; the no-results empty state appears for an
-  unmatched search; rapid duplicate drops of the same site only ever add one cart entry; the
-  mobile viewport renders the stacked layout with a floating cart button and slide-up drawer —
-  with zero browser console errors throughout.
+### Engineering Decisions & Changes
 
-## Known Limitations
+#### Leaflet SSR Handling
 
-- Touch-based drag-and-drop on real mobile hardware is not exercised by the automated pass
-  (headless Chromium has no true touch-drag emulation); the tap-to-open-popup →
-  "Add to cart" fallback is the intended and tested path on touch devices.
-- At the fully-zoomed-out "fit to all sites" view, the densest kiosk clusters still overlap
-  visually — panning/zooming in (as a user naturally would to inspect a cluster) fully
-  separates them; a production version would likely add zoom-dependent decluttering.
+During development, an SSR issue occurred because Leaflet depends on browser-specific APIs such as `window`.
+
+An initial workaround used:
+
+```ts
+export const dynamic = "force-dynamic";
+```
+
